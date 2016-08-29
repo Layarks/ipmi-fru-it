@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 
 #include "iniparser.h"
 #include "fru-defs.h"
@@ -390,10 +391,17 @@ int gen_bia(dictionary *ini, char **bia_data)
     }
 
     mfg_date = iniparser_getint(ini, get_key(BIA, MFG_DATETIME), -1);
-    if (mfg_date == -1) {
+    if (mfg_date <= 0) {
+        struct timeval tv;
+        int secs_from_1970_1996 = 820450800;
+
         fprintf(stdout, "Manufacturing time not specified. "
-                "Defaulting to unspecified\n");
-        mfg_date = 0;
+                "Get system time\n");
+
+        gettimeofday(&tv,NULL);
+        mfg_date = (int)(tv.tv_sec - secs_from_1970_1996);
+        fprintf(stdout,"mfg time is %d\n",mfg_date);
+        //mfg_date = 0;
     }
     size += sizeof(struct board_info_area);
 
@@ -466,6 +474,8 @@ int gen_bia(dictionary *ini, char **bia_data)
     /* Length is in multiples of 8 bytes */
     bia->area_length = size / 8;
     bia->language_code = lang_code;
+    /* Transfer time base unit value to minutes */
+    mfg_date /= 60;
     mfg_date = htole32(mfg_date);
     memcpy(bia->mfg_date, &mfg_date, 3);
 
@@ -871,7 +881,7 @@ int write_fru_data(const char*filename, void *data, int length)
 int main(int argc, char **argv)
 {
     char *fru_ini_file, *outfile, *data;
-    int c, length, max_size=0, result;
+    int c, length, max_size=0, result, wflag = 0;
     dictionary *ini;
 
     /* supported cmdline options */
@@ -889,7 +899,14 @@ int main(int argc, char **argv)
             case 'i':
                 fprintf(stderr, "\nError! Option not implemented\n\n");
                 exit(EXIT_FAILURE);
+            case 'w':
+                ++wflag;
+                break;
             case 's':
+                if(!wflag){
+                    fprintf(stderr, "\nPlease input write option(-w) in first parameter to generate fru file \n");
+                    exit(EXIT_FAILURE);
+                }
                 result = sscanf(optarg, "%d", &max_size);
                 if (result == 0 || result == EOF) {
                     fprintf(stderr, "\nError! Invalid maximum file size (-s %s)\n\n",
@@ -898,9 +915,19 @@ int main(int argc, char **argv)
                 }
                 break;
             case 'c':
+                if(!wflag){
+
+                    fprintf(stderr, "\nPlease input write option(-w) in first parameter to generate fru file \n");
+                    exit(EXIT_FAILURE);
+                }
                 fru_ini_file = optarg;
                 break;
             case 'o':
+                if(!wflag){
+
+                    fprintf(stderr, "\nPlease input write option(-w) in first parameter to generate fru file \n");
+                    exit(EXIT_FAILURE);
+                }
                 outfile = optarg;
                 break;
             case 'a':
